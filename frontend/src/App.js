@@ -14,18 +14,19 @@ function App() {
     <div className="App">
       <header className="App-header">
         <img src={logo} className="App-logo" alt="logo" />
-        <p>{message || "Loading..."}</p>
+        {/* <p>{message || "Loading..."}</p> */}
         <p>
-          Edit <code>src/App.js</code> and save to reload.
+          Usando Docker Compose para subir uma Aplicação Web na porta localhost:80.
+          {/* Edit "src/App.js" and save to reload. */}
         </p>
-        <a
+        {/* <a
           className="App-link"
           href="https://reactjs.org"
           target="_blank"
           rel="noopener noreferrer"
         >
           Learn React
-        </a>
+        </a> */}
       </header>
     </div>
   );
