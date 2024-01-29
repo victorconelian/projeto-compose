@@ -1,15 +1,92 @@
-## Compose sample application
+## Aplicando Docker Compose
 
-### Use with Docker Development Environments
+Para fins de estudos Docker, pegamos um repositório de uma aplicação React com backend em NodeJS e banco de dados Mariadb. Nosso principal objetivo será escrever os Dockerfiles de cada serviço e subir essa aplicação usando o Compose, de forma que possamos visualizá-la na porta 80 local.
 
-You can open this sample in the Dev Environments feature of Docker Desktop version 4.12 or later.
-
-[Open in Docker Dev Environments <img src="../open_in_new.svg" alt="Open in Docker Dev Environments" align="top"/>](https://open.docker.com/dashboard/dev-envs?url=https://github.com/docker/awesome-compose/tree/master/react-express-mysql)
-
-### React application with a NodeJS backend and a MySQL database
-
-Project structure:
+### Dockerfile:
+**backend:**
 ```
+FROM node:lts AS development
+
+# variaveis de ambiente do node
+ARG NODE_ENV=production
+ENV NODE_ENV $NODE_ENV
+
+WORKDIR /code
+
+# porta padrao 80 do node, 9929 e 9230 (testes) para debug
+ARG PORT=80
+ENV PORT $PORT
+# expondo as portas
+EXPOSE $PORT 9229 9230
+
+COPY package.json /code/package.json
+COPY package-lock.json /code/package-lock.json
+RUN npm ci
+
+# healthcheck a cada 30s
+HEALTHCHECK --interval=30s \
+  CMD node healthcheck.js
+
+# copy in our source code last, as it changes the most
+COPY . /code
+
+CMD [ "node", "src/index.js" ]
+
+FROM development as dev-envs
+RUN <<EOF
+apt-get update
+apt-get install -y --no-install-recommends git
+EOF
+
+RUN <<EOF
+useradd -s /bin/bash -m vscode
+groupadd docker
+usermod -aG docker vscode
+EOF
+COPY --from=gloursdocker/docker / /
+```
+
+**frontend:**
+```
+FROM node:lts AS development
+
+ENV CI=true
+ENV PORT=3000
+
+WORKDIR /code
+COPY package.json /code/package.json
+COPY package-lock.json /code/package-lock.json
+RUN npm ci
+COPY . /code
+
+CMD [ "npm", "start" ]
+
+FROM development AS builder
+
+RUN npm run build
+
+FROM development as dev-envs
+RUN <<EOF
+apt-get update
+apt-get install -y --no-install-recommends git
+EOF
+
+RUN <<EOF
+useradd -s /bin/bash -m vscode
+groupadd docker
+usermod -aG docker vscode
+EOF
+COPY --from=gloursdocker/docker / /
+CMD [ "npm", "start" ]
+
+FROM nginx:1.13-alpine
+
+COPY --from=builder /code/build /usr/share/nginx/html
+```
+
+### Estrutura do Projeto:
+```
+git branch compose
 .
 ├── backend
 │   ├── Dockerfile
@@ -22,39 +99,29 @@ Project structure:
 │   └── Dockerfile
 └── README.md
 ```
-
-[_compose.yaml_](compose.yaml)
+### Compose:
 ```
 services:
   backend:
     build: backend
     ports:
-      - 80:80
+      - 88:80
       - 9229:9229
       - 9230:9230
     ...
   db:
     # We use a mariadb image which supports both amd64 & arm64 architecture
     image: mariadb:10.6.4-focal
-    # If you really want to use MySQL, uncomment the following line
-    #image: mysql:8.0.27
     ...
   frontend:
     build: frontend
     ports:
-    - 3000:3000
+    - 80:3000
     ...
 ```
-The compose file defines an application with three services `frontend`, `backend` and `db`.
-When deploying the application, docker compose maps port 3000 of the frontend service container to port 3000 of the host as specified in the file.
-Make sure port 3000 on the host is not already being in use.
+O arquivo Compose define uma aplicação com três serviços, banco de dados, backend e frontend. Quando fizer o deploy da aplicação, o docker compose mapeia a porta 3000 do serviço frontend para a porta 80 do host, como especificado no arquivo. Garante que a porta 80 não esteja em uso.
 
-> ℹ️ **_INFO_**  
-> For compatibility purpose between `AMD64` and `ARM64` architecture, we use a MariaDB as database instead of MySQL.  
-> You still can use the MySQL image by uncommenting the following line in the Compose file   
-> `#image: mysql:8.0.27`
-
-## Deploy with docker compose
+## Deploy com docker compose
 
 ```
 $ docker compose up -d
@@ -70,9 +137,9 @@ Creating react-express-mysql_backend_1 ... done
 Creating react-express-mysql_frontend_1 ... done
 ```
 
-## Expected result
+## Resultados Esperados
 
-Listing containers must show containers running and the port mapping as below:
+Lista com os containers que devem aparecer executando e suas portas:
 ```
 $ docker ps
 CONTAINER ID        IMAGE                          COMMAND                  CREATED             STATUS                   PORTS                                                  NAMES
@@ -80,19 +147,12 @@ f3e1183e709e        react-express-mysql_frontend   "docker-entrypoint.s…"   8 
 9422da53da76        react-express-mysql_backend    "docker-entrypoint.s…"   8 minutes ago       Up 8 minutes (healthy)   0.0.0.0:80->80/tcp, 0.0.0.0:9229-9230->9229-9230/tcp   react-express-mysql_backend_1
 a434bce6d2be        mysql:8.0.19                   "docker-entrypoint.s…"   8 minutes ago       Up 8 minutes             3306/tcp, 33060/tcp                                    react-express-mysql_db_1
 ```
-
-After the application starts, navigate to `http://localhost:3000` in your web browser.
+Após iniciado o deploy, navegue para o `http://localhost:80` no seu navegador web.
 
 ![page](./output.png)
 
 
-The backend service container has the port 80 mapped to 80 on the host.
-```
-$ curl localhost:80
-{"message":"Hello from MySQL 8.0.19"}
-```
-
-Stop and remove the containers
+Parar e remover os containers:
 ```
 $ docker compose down
 Stopping react-express-mysql_frontend_1 ... done
